@@ -1,0 +1,11 @@
+[Unit]
+Description=opser_agent
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/opser
+Environment="host=localhost:8080"
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
