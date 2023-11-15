@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 ExecStart=/usr/local/bin/opser
-Environment="host=localhost:8080"
+Environment="server=localhost:8080"
 Restart=on-failure
 
 [Install]

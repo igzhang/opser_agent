@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -10,20 +11,53 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func ExecuteCmd(cmd string) (string, error) {
-	output, err := exec.Command("bash", "-c", cmd).Output()
+var CmdNothingID uint = 0
+
+type Cmd struct {
+	ID      uint   `json:"id"`
+	Context string `json:"context"`
+}
+
+type CmdResult struct {
+	ID        uint   `json:"id"`
+	IsSuccess bool   `json:"is_success"`
+	Context   string `json:"stdout"`
+	Hostname  string `json:"hostname"`
+}
+
+func ExecuteCmd(cmd string) (string, bool) {
+	command := exec.Command("bash", "-c", cmd)
+
+	stdout, err := command.StdoutPipe()
 	if err != nil {
-		log.Println("Command execution failed:", err)
-		return "", err
+		return err.Error(), false
+	}
+	stderr, err := command.StderrPipe()
+	if err != nil {
+		return err.Error(), false
 	}
 
-	return string(output), nil
+	if err := command.Start(); err != nil {
+		return err.Error(), false
+	}
+
+	stderr_string, _ := io.ReadAll(stderr)
+	log.Printf("exec stderr %s\n", stderr_string)
+
+	stdout_string, _ := io.ReadAll(stdout)
+	log.Printf("exec stdout %s\n", stdout_string)
+
+	if err := command.Wait(); err != nil {
+		return string(stderr_string), false
+	}
+
+	return string(stdout_string), true
 }
 
 func main() {
-	serverAddr := os.Getenv("host")
+	serverAddr := os.Getenv("server")
 	if len(serverAddr) == 0 {
-		log.Fatalln("Env host not found!")
+		log.Fatalln("Env server not found!")
 	}
 
 	// signal
@@ -45,25 +79,36 @@ func main() {
 	}
 	log.Printf("My Hostname: %s\n", hostname)
 
-	// receve handler
+	// command handler
 	go func() {
 		defer close(done)
 		for {
-			_, message, err := c.ReadMessage()
-			if err != nil {
+			// ask for job
+			c.WriteJSON(CmdResult{
+				ID:       CmdNothingID,
+				Hostname: hostname,
+			})
+
+			var cmd Cmd
+			if err := c.ReadJSON(&cmd); err != nil {
 				log.Println("Read error:", err)
 				return
 			}
-			log.Printf("Received message from server: %s\n", message)
-			commandStdout, err := ExecuteCmd(string(message))
 
-			err_msg := ""
-			if err != nil {
-				err_msg = err.Error()
+			// nothing to do
+			if cmd.ID == CmdNothingID {
+				time.Sleep(3 * time.Second)
+				continue
 			}
-			c.WriteJSON(map[string]string{
-				"out": commandStdout,
-				"err": err_msg,
+			log.Printf("Received message from server: %d %s\n", cmd.ID, cmd.Context)
+
+			commandStdout, IsSuccess := ExecuteCmd(cmd.Context)
+
+			c.WriteJSON(CmdResult{
+				ID:        cmd.ID,
+				IsSuccess: IsSuccess,
+				Context:   commandStdout,
+				Hostname:  hostname,
 			})
 		}
 	}()
@@ -77,9 +122,9 @@ func main() {
 		case <-done:
 			return
 		case <-ticker.C:
-			err := c.WriteMessage(websocket.PingMessage, []byte(hostname))
+			err := c.WriteMessage(websocket.PingMessage, []byte("ping"))
 			if err != nil {
-				log.Fatalf("Write error: %v", err)
+				log.Fatalf("Failed to send heartbeat: %v", err)
 			}
 		case <-interrupt:
 			log.Println("Interrupt signal received, closing connection...")
