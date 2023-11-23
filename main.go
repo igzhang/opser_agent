@@ -122,7 +122,7 @@ func main() {
 		case <-done:
 			return
 		case <-ticker.C:
-			err := c.WriteMessage(websocket.PingMessage, []byte("ping"))
+			err := c.WriteMessage(websocket.PingMessage, []byte(hostname))
 			if err != nil {
 				log.Fatalf("Failed to send heartbeat: %v", err)
 			}
