@@ -6,12 +6,14 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 var CmdNothingID uint = 0
+var osPlatform = runtime.GOOS
 
 type Cmd struct {
 	ID      uint   `json:"id"`
@@ -26,7 +28,12 @@ type CmdResult struct {
 }
 
 func ExecuteCmd(cmd string) (string, bool) {
-	command := exec.Command("bash", "-c", cmd)
+	var command *exec.Cmd
+	if osPlatform == "windows" {
+		command = exec.Command("cmd", "/C", cmd)
+	} else {
+		command = exec.Command("bash", "-c", cmd)
+	}
 
 	stdout, err := command.StdoutPipe()
 	if err != nil {

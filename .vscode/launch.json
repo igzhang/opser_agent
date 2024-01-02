@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${fileDirname}",
-            "env": {"server": "ws://localhost:8080/ws"}
+            "env": {"server": "ws://47.94.246.47:6001/ws"}
         }
     ]
 }
